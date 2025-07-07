@@ -129,18 +129,22 @@ resource "aws_security_group" "database-security-group" {
 # Create Database Instance Restored from DB Snapshots
 # terraform aws db instance
 resource "aws_db_instance" "database-instance" {
-  identifier             = "aws-goat-db"
-  allocated_storage      = 10
-  instance_class         = "db.t3.micro"
-  engine                 = "mysql"
-  engine_version         = "8.0"
-  username               = "root"
-  password               = "T2kVB3zgeN3YbrKS"
-  parameter_group_name   = "default.mysql8.0"
-  skip_final_snapshot    = true
-  availability_zone      = "us-east-1a"
-  db_subnet_group_name   = aws_db_subnet_group.database-subnet-group.name
-  vpc_security_group_ids = [aws_security_group.database-security-group.id]
+  identifier                          = "aws-goat-db"
+  allocated_storage                   = 10
+  instance_class                      = "db.t3.micro"
+  engine                              = "mysql"
+  engine_version                      = "8.0"
+  username                            = "root"
+  password                            = "T2kVB3zgeN3YbrKS"
+  parameter_group_name                = "default.mysql8.0"
+  skip_final_snapshot                 = true
+  availability_zone                   = "us-east-1a"
+  db_subnet_group_name                = aws_db_subnet_group.database-subnet-group.name
+  vpc_security_group_ids              = [aws_security_group.database-security-group.id]
+  publicly_accessible                 = false
+  deletion_protection                 = true
+  iam_database_authentication_enabled = true
+  multi_az                            = true
 }
 
 
@@ -469,6 +473,7 @@ resource "aws_lb_listener" "listener" {
 resource "aws_secretsmanager_secret" "rds_creds" {
   name                    = "RDS_CREDS"
   recovery_window_in_days = 0
+  kms_key_id              = "aws/secretsmanager"
 }
 
 resource "aws_secretsmanager_secret_version" "secret_version" {
@@ -524,4 +529,14 @@ resource "aws_s3_bucket" "bucket_tf_files" {
 
 output "ad_Target_URL" {
   value = "${aws_alb.application_load_balancer.dns_name}:80/login.php"
+}
+resource "aws_s3_bucket_public_access_block" "my_aws_s3_bucket_public_access_block_aws_s3_bucket_bucket_tf_files" {
+  bucket             = aws_s3_bucket.bucket_tf_files.id
+  ignore_public_acls = true
+}
+resource "aws_s3_bucket_versioning" "my_aws_s3_bucket_versioning_aws_s3_bucket_bucket_tf_files" {
+  bucket = aws_s3_bucket.bucket_tf_files.id
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
