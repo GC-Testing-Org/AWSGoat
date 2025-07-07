@@ -27,6 +27,9 @@ resource "aws_lambda_function" "react_lambda_app" {
   runtime       = "nodejs18.x"
   role          = aws_iam_role.blog_app_lambda.arn
   depends_on    = [data.archive_file.lambda_zip, null_resource.file_replacement_lambda_react]
+  tracing_config {
+    mode = "Active"
+  }
 }
 
 
@@ -141,11 +144,12 @@ resource "aws_api_gateway_integration_response" "endpoint" {
 }
 
 resource "aws_lambda_permission" "apigw_ba" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.react_lambda_app.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+  statement_id           = "AllowAPIGatewayInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.react_lambda_app.function_name
+  principal              = "apigateway.amazonaws.com"
+  source_arn             = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+  function_url_auth_type = "AWS_IAM"
 }
 
 
@@ -3078,6 +3082,7 @@ resource "aws_lambda_layer_version" "lambda_layer" {
   layer_name               = "bcrypt-pyjwt"
   compatible_architectures = ["x86_64"]
   compatible_runtimes      = ["python3.9"]
+  skip_destroy             = true
 }
 
 resource "aws_lambda_function" "lambda_ba_data" {
@@ -3093,6 +3098,9 @@ resource "aws_lambda_function" "lambda_ba_data" {
     variables = {
       JWT_SECRET = "T2BYL6#]zc>Byuzu"
     }
+  }
+  tracing_config {
+    mode = "Active"
   }
 }
 
@@ -3160,11 +3168,12 @@ resource "aws_iam_policy" "lambda_data_policies" {
 
 
 resource "aws_lambda_permission" "apigw_ba_python" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.lambda_ba_data.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.apiLambda_ba.execution_arn}/*/*"
+  statement_id           = "AllowAPIGatewayInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.lambda_ba_data.function_name
+  principal              = "apigateway.amazonaws.com"
+  source_arn             = "${aws_api_gateway_rest_api.apiLambda_ba.execution_arn}/*/*"
+  function_url_auth_type = "AWS_IAM"
 }
 
 
@@ -3206,7 +3215,7 @@ resource "aws_s3_bucket_public_access_block" "bucket_upload" {
 
   block_public_acls       = false
   block_public_policy     = false
-  ignore_public_acls      = false
+  ignore_public_acls      = true
   restrict_public_buckets = false
 }
 
@@ -3219,8 +3228,8 @@ resource "aws_s3_bucket_ownership_controls" "bucket_upload" {
 
 resource "aws_s3_bucket_acl" "bucket_upload" {
   depends_on = [
-	aws_s3_bucket_public_access_block.bucket_upload,
-	aws_s3_bucket_ownership_controls.bucket_upload,
+    aws_s3_bucket_public_access_block.bucket_upload,
+    aws_s3_bucket_ownership_controls.bucket_upload,
   ]
 
   bucket = aws_s3_bucket.bucket_upload.id
@@ -3231,7 +3240,7 @@ resource "aws_s3_bucket_policy" "allow_access_for_prod" {
   bucket = aws_s3_bucket.bucket_upload.id
   policy = data.aws_iam_policy_document.allow_get_access.json
 
-  depends_on = [ aws_s3_bucket_acl.bucket_upload ]
+  depends_on = [aws_s3_bucket_acl.bucket_upload]
 }
 data "aws_iam_policy_document" "allow_get_access" {
   statement {
@@ -3293,7 +3302,7 @@ resource "aws_s3_bucket_public_access_block" "dev" {
 
   block_public_acls       = false
   block_public_policy     = false
-  ignore_public_acls      = false
+  ignore_public_acls      = true
   restrict_public_buckets = false
 }
 
@@ -3306,8 +3315,8 @@ resource "aws_s3_bucket_ownership_controls" "dev" {
 
 resource "aws_s3_bucket_acl" "dev" {
   depends_on = [
-	aws_s3_bucket_public_access_block.dev,
-	aws_s3_bucket_ownership_controls.dev,
+    aws_s3_bucket_public_access_block.dev,
+    aws_s3_bucket_ownership_controls.dev,
   ]
 
   bucket = aws_s3_bucket.dev.id
@@ -3318,7 +3327,7 @@ resource "aws_s3_bucket_policy" "allow_access_for_dev" {
   bucket = aws_s3_bucket.dev.bucket
   policy = data.aws_iam_policy_document.allow_get_list_access.json
 
-  depends_on = [ aws_s3_bucket_acl.dev ]
+  depends_on = [aws_s3_bucket_acl.dev]
 }
 data "aws_iam_policy_document" "allow_get_list_access" {
   statement {
@@ -3373,7 +3382,7 @@ resource "aws_s3_bucket_public_access_block" "bucket_temp" {
 
   block_public_acls       = false
   block_public_policy     = false
-  ignore_public_acls      = false
+  ignore_public_acls      = true
   restrict_public_buckets = false
 }
 
@@ -3386,8 +3395,8 @@ resource "aws_s3_bucket_ownership_controls" "bucket_temp" {
 
 resource "aws_s3_bucket_acl" "bucket_temp" {
   depends_on = [
-	aws_s3_bucket_public_access_block.bucket_temp,
-	aws_s3_bucket_ownership_controls.bucket_temp,
+    aws_s3_bucket_public_access_block.bucket_temp,
+    aws_s3_bucket_ownership_controls.bucket_temp,
   ]
 
   bucket = aws_s3_bucket.bucket_temp.id
@@ -3609,6 +3618,9 @@ resource "aws_instance" "goat_instance" {
   depends_on = [
     aws_s3_object.upload_temp_object_2
   ]
+  tenancy                 = "dedicated"
+  disable_api_termination = true
+  monitoring              = true
 }
 
 
@@ -3623,6 +3635,11 @@ resource "aws_dynamodb_table" "users_table" {
     name = "email"
     type = "S"
   }
+  deletion_protection_enabled = true
+  tags                        = "null"
+  server_side_encryption {
+    enabled = false
+  }
 }
 resource "aws_dynamodb_table" "posts_table" {
   name           = "blog-posts"
@@ -3634,6 +3651,11 @@ resource "aws_dynamodb_table" "posts_table" {
   attribute {
     name = "id"
     type = "S"
+  }
+  deletion_protection_enabled = true
+  tags                        = "null"
+  server_side_encryption {
+    enabled = false
   }
 }
 
@@ -3715,4 +3737,31 @@ EOF
 output "app_url" {
   value = "${aws_api_gateway_stage.api.invoke_url}/react"
 }
-
+resource "aws_s3_bucket_public_access_block" "my_aws_s3_bucket_public_access_block_aws_s3_bucket_bucket_tf_files" {
+  bucket             = aws_s3_bucket.bucket_tf_files.id
+  ignore_public_acls = true
+}
+resource "aws_s3_bucket_versioning" "my_aws_s3_bucket_versioning_aws_s3_bucket_bucket_upload" {
+  bucket = aws_s3_bucket.bucket_upload.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+resource "aws_s3_bucket_versioning" "my_aws_s3_bucket_versioning_aws_s3_bucket_dev" {
+  bucket = aws_s3_bucket.dev.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+resource "aws_s3_bucket_versioning" "my_aws_s3_bucket_versioning_aws_s3_bucket_bucket_temp" {
+  bucket = aws_s3_bucket.bucket_temp.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+resource "aws_s3_bucket_versioning" "my_aws_s3_bucket_versioning_aws_s3_bucket_bucket_tf_files" {
+  bucket = aws_s3_bucket.bucket_tf_files.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
